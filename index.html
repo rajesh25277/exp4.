@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CGPA Calculator</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#9aa4b2;--accent:#3b82f6}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{margin:0;background:linear-gradient(180deg,#071029 0%,#07182a 100%);color:#e6eef6;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+    .container{width:100%;max-width:900px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(2,6,23,0.6)}
+    h1{margin:0 0 6px;font-size:20px}
+    p.lead{margin:0 0 18px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse;margin-bottom:12px}
+    th,td{padding:8px 10px;text-align:left}
+    thead th{font-size:13px;color:var(--muted);border-bottom:1px solid rgba(255,255,255,0.04)}
+    tbody tr{border-bottom:1px dashed rgba(255,255,255,0.03)}
+    input[type=number], select{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:6px 8px;border-radius:6px;color:inherit;width:100%}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+    button{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:white;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .result{display:flex;gap:16px;align-items:center}
+    .card{background:rgba(255,255,255,0.02);padding:12px 14px;border-radius:8px}
+    .small{font-size:12px;color:var(--muted)}
+    .actions{display:flex;gap:8px;align-items:center}
+    @media (max-width:640px){.controls{flex-direction:column}.result{flex-direction:column;align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CGPA Calculator</h1>
+    <p class="lead">Add each semester's total credits and SGPA (or semester GPA). The calculator computes weighted CGPA.</p>
+
+    <div class="controls">
+      <button id="addRow">+ Add Semester</button>
+      <button id="calc">Calculate CGPA</button>
+      <button id="export" class="ghost">Export CSV</button>
+      <button id="reset" class="ghost">Reset</button>
+    </div>
+
+    <table id="semTable" aria-label="Semester table">
+      <thead>
+        <tr>
+          <th style="width:44px">#</th>
+          <th>Semester name</th>
+          <th style="width:140px">Credits</th>
+          <th style="width:160px">SGPA (0-10)</th>
+          <th style="width:64px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- rows added dynamically -->
+      </tbody>
+    </table>
+
+    <div class="result">
+      <div class="card">
+        <div style="font-size:18px" id="cgpa">CGPA: —</div>
+        <div class="small">Total Credits: <span id="totalCredits">0</span></div>
+      </div>
+
+      <div class="card">
+        <div style="font-size:16px" id="percent">Percentage (approx): —</div>
+        <div class="small">Formula used: CGPA × 9.5 (commonly used convert)</div>
+      </div>
+
+      <div style="margin-left:auto" class="actions small">
+        <div>Tip: enter SGPA like 8.5 and credits as integer.</div>
+      </div>
+    </div>
+
+    <hr style="margin:14px 0;border:none;border-top:1px solid rgba(255,255,255,0.02)">
+    <div class="small">Designed for colleges using 10-point semester GPAs. If you need letter-grade mapping or percentage-only input, ask and I can add it.</div>
+  </div>
+
+  <script>
+    const tbody = document.querySelector('#semTable tbody');
+    const addRowBtn = document.getElementById('addRow');
+    const calcBtn = document.getElementById('calc');
+    const resetBtn = document.getElementById('reset');
+    const exportBtn = document.getElementById('export');
+    const cgpaEl = document.getElementById('cgpa');
+    const totalCreditsEl = document.getElementById('totalCredits');
+    const percentEl = document.getElementById('percent');
+
+    function createRow(name = '', credits = '', sgpa = ''){
+      const tr = document.createElement('tr');
+      const index = tbody.children.length + 1;
+      tr.innerHTML = `
+        <td>${index}</td>
+        <td><input type="text" class="semName" placeholder="Semester ${index}" value="${name}"></td>
+        <td><input type="number" class="credits" min="0" step="1" value="${credits}"></td>
+        <td><input type="number" class="sgpa" min="0" max="10" step="0.01" value="${sgpa}"></td>
+        <td><button class="del">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      tr.querySelector('.del').addEventListener('click', ()=>{ tr.remove(); refreshIndices(); });
+      return tr;
+    }
+
+    function refreshIndices(){
+      Array.from(tbody.children).forEach((tr,i)=>{ tr.children[0].textContent = i+1; tr.querySelector('.semName').placeholder = `Semester ${i+1}` });
+    }
+
+    // start with 2 rows
+    createRow('Semester 1', '', '');
+    createRow('Semester 2', '', '');
+
+    addRowBtn.addEventListener('click', ()=> createRow());
+
+    function calculate(){
+      let totalCredits = 0;
+      let weightedSum = 0;
+      let invalid = false;
+
+      Array.from(tbody.querySelectorAll('tr')).forEach(tr=>{
+        const credits = parseFloat(tr.querySelector('.credits').value);
+        const sgpa = parseFloat(tr.querySelector('.sgpa').value);
+        if(Number.isFinite(credits) && Number.isFinite(sgpa)){
+          if(credits < 0 || sgpa < 0 || sgpa > 10) { invalid = true; }
+          totalCredits += credits;
+          weightedSum += credits * sgpa;
+        } else if((tr.querySelector('.credits').value === '') && (tr.querySelector('.sgpa').value === '')){
+          // ignore empty rows
+        } else {
+          invalid = true;
+        }
+      });
+
+      if(invalid){ alert('Please enter valid numeric credits (≥0) and SGPA (0–10). Empty rows are ignored.'); return; }
+      if(totalCredits === 0){ cgpaEl.textContent = 'CGPA: —'; totalCreditsEl.textContent = '0'; percentEl.textContent = 'Percentage (approx): —'; return; }
+
+      const cgpa = weightedSum / totalCredits;
+      cgpaEl.textContent = 'CGPA: ' + cgpa.toFixed(3);
+      totalCreditsEl.textContent = totalCredits.toFixed(0);
+      percentEl.textContent = 'Percentage (approx): ' + (cgpa * 9.5).toFixed(2) + '%';
+    }
+
+    calcBtn.addEventListener('click', calculate);
+
+    resetBtn.addEventListener('click', ()=>{
+      if(!confirm('Reset all semesters?')) return;
+      tbody.innerHTML = '';
+      createRow('Semester 1','', '');
+      createRow('Semester 2','', '');
+      cgpaEl.textContent = 'CGPA: —'; totalCreditsEl.textContent = '0'; percentEl.textContent = 'Percentage (approx): —';
+    });
+
+    exportBtn.addEventListener('click', ()=>{
+      const rows = [];
+      Array.from(tbody.querySelectorAll('tr')).forEach(tr=>{
+        const name = tr.querySelector('.semName').value.trim();
+        const credits = tr.querySelector('.credits').value.trim();
+        const sgpa = tr.querySelector('.sgpa').value.trim();
+        if(name || credits || sgpa) rows.push([name || '-', credits || '-', sgpa || '-']);
+      });
+      if(rows.length === 0){ alert('No semester data to export.'); return; }
+      let csv = 'Semester,Credits,SGPA\n' + rows.map(r=>r.map(c=>`"${c.replace(/"/g,'""') }"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'cgpa_data.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+
+    // allow enter key to calculate when focus is inside table
+    document.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && document.activeElement && tbody.contains(document.activeElement)) { e.preventDefault(); calculate(); } });
+  </script>
+</body>
+</html>
